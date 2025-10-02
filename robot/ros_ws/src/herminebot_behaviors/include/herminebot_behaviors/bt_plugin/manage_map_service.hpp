@@ -6,6 +6,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "hrc_interfaces/srv/manage_objects_map.hpp"
 #include "hrc_interfaces/srv/get_robot_pose.hpp"
+#include "herminebot_behaviors/bt_plugin/bt_utils.hpp"
 
 
 namespace hrc_behavior_tree
@@ -34,8 +35,8 @@ public:
     static BT::PortsList providedPorts()
     {
         return {
-            BT::InputPort<std::vector<std::vector<std::vector<double>>>>("new_objects"),
-            BT::InputPort<std::vector<std::vector<double>>>("points_objects_to_remove"),
+            BT::InputPort<std::vector<std::vector<geometry_msgs::msg::Point>>>("new_objects"),
+            BT::InputPort<std::vector<geometry_msgs::msg::Point>>("points_objects_to_remove"),
             BT::InputPort<bool>(
                 "is_robot_relative", false,
                 "Whether the position is relative to the robot or to the map")
@@ -47,16 +48,5 @@ protected:
 };
 
 }  // namespace hrc_behavior_tree
-
-namespace BT
-{
-
-template<>
-std::vector<std::vector<std::vector<double>>> convertFromString(StringView str);
-
-template<>
-std::vector<std::vector<double>> convertFromString(StringView str);
-
-}
 
 #endif  // HRC_BEHAVIORS_BT_PLUGIN_MANAGE_MAP_SERVICE_HPP

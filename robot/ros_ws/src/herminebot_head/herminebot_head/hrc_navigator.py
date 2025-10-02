@@ -1,9 +1,8 @@
-import math
-
 import builtin_interfaces.msg as bint_msgs
 import geometry_msgs.msg as geo_msgs
 import hrc_interfaces.action as hrc_action
 import hrc_interfaces.srv as hrc_srv
+import hrc_utils
 import nav2_msgs.action as nav_action
 import nav2_simple_commander.robot_navigator as nav2
 import rclpy
@@ -45,7 +44,7 @@ class HRCNavigator(nav2.BasicNavigator):
         :return: Whether the action will be realized
         """
         self.debug("Waiting for 'DriveOnHeading' action server")
-        while not self.drive_on_heading_client.wait_for_server(timeout_sec=1.0):
+        while not self.drive_on_heading_client.wait_for_server(timeout_sec=hrc_utils.SERVICE_TIMEOUT):
             self.info("'DriveOnHeading' action server not available, waiting...")
 
         goal_msg = nav_action.DriveOnHeading.Goal()
@@ -73,7 +72,7 @@ class HRCNavigator(nav2.BasicNavigator):
         :return: Whether the action has been accepted
         """
         self.debug("Waiting for 'Wait' action server")
-        while not self.wait_client.wait_for_server(timeout_sec=1.0):
+        while not self.wait_client.wait_for_server(timeout_sec=hrc_utils.SERVICE_TIMEOUT):
             self.info("'Wait' action server not available, waiting...")
 
         goal_msg = nav_action.Wait.Goal()
@@ -100,7 +99,7 @@ class HRCNavigator(nav2.BasicNavigator):
         :return: Whether the action has been accepted
         """
         self.debug("Waiting for 'Preempt' action server")
-        while not self.preemption_client.wait_for_server(timeout_sec=1.0):
+        while not self.preemption_client.wait_for_server(timeout_sec=hrc_utils.SERVICE_TIMEOUT):
             self.info("'Preempt' action server not available, waiting...")
 
         goal_msg = hrc_action.Preempt.Goal()
@@ -128,7 +127,7 @@ class HRCNavigator(nav2.BasicNavigator):
         :return: A list containing the robot position [x, y, yaw] if the position could be fetched else an empty list
         """
         self.debug("Waiting for 'get_robot_pose' server")
-        while not self.get_robot_pose_client.wait_for_service(timeout_sec=1.0):
+        while not self.get_robot_pose_client.wait_for_service(timeout_sec=hrc_utils.SERVICE_TIMEOUT):
             self.info("'get_robot_pose' service not available, waiting...")
 
         req = hrc_srv.GetRobotPose.Request()
@@ -136,7 +135,7 @@ class HRCNavigator(nav2.BasicNavigator):
         req.base_frame = target_frame
 
         future = self.get_robot_pose_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=hrc_utils.SERVICE_TIMEOUT)
 
         result: hrc_srv.GetRobotPose.Response = future.result()
         if result is None:
@@ -147,33 +146,18 @@ class HRCNavigator(nav2.BasicNavigator):
     def manage_map_objects(self,
                            new_objects: list[list[dict]],
                            points_to_remove: list[dict],
-                           is_robot_relative=False,
-                           source_frame='base_link',
-                           target_frame='map') -> None:
+                           is_robot_relative=False) -> None:
         """
         Modify the keepout mask filter of the map.
 
         :param new_objects: Objects to add
         :param points_to_remove: Points where all the polygons containing at least one point is removed
         :param is_robot_relative: Whether the coordinates are relative to the robot position
-        :param source_frame: The source frame (only used if 'is_robot_relative' is 'True')
-        :param target_frame: The target frame (only used if 'is_robot_relative' is 'True')
         :return: None
         """
-        robot_pose = [0.0, 0.0, 0.0]
-        if is_robot_relative:
-            if pose := self.get_robot_pose(source_frame, target_frame):
-                robot_pose = pose
-            else:
-                return
-
-        def robot_to_map(px, py):
-            """Calculate position in the target frame."""
-            x = px * math.cos(robot_pose[2]) - py * math.sin(robot_pose[2]) + robot_pose[0]
-            y = py * math.cos(robot_pose[2]) + px * math.sin(robot_pose[2]) + robot_pose[1]
-            return x, y
-
         req = hrc_srv.ManageObjectsMap.Request()
+
+        req.is_robot_relative = is_robot_relative
 
         # Set new objects
         objects = []
@@ -183,8 +167,6 @@ class HRCNavigator(nav2.BasicNavigator):
                 p = geo_msgs.Point32()
                 p.x = point['x']
                 p.y = point['y']
-                if is_robot_relative:
-                    p.x, p.y = robot_to_map(p.x, p.y)
                 poly.points.append(p)
             objects.append(poly)
         req.new_objects = objects
@@ -195,19 +177,17 @@ class HRCNavigator(nav2.BasicNavigator):
             p = geo_msgs.Point32()
             p.x = point['x']
             p.y = point['y']
-            if is_robot_relative:
-                p.x, p.y = robot_to_map(p.x, p.y)
             points.append(p)
         req.points_objects_to_remove = points
 
         future = self.manage_map_objects_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=hrc_utils.SERVICE_TIMEOUT)
 
     def start_pami(self) -> None:
         """Start the PAMI."""
         req = hrc_srv.StartPami.Request()
         future = self.start_pami_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=hrc_utils.SERVICE_TIMEOUT)
 
     def get_team_color(self) -> str:
         """
@@ -217,7 +197,7 @@ class HRCNavigator(nav2.BasicNavigator):
         """
         req = hrc_srv.GetTeamColor.Request()
         future = self.color_team_client.call_async(req)
-        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=hrc_utils.SERVICE_TIMEOUT)
         if future.result():
             return future.result().team_color
         self.get_logger().error('Could not get team color')
@@ -236,7 +216,7 @@ class HRCNavigator(nav2.BasicNavigator):
         :return: Whether the action will be realized
         """
         self.debug("Waiting for 'OmniDrive' action server")
-        while not self.drive_omni_client.wait_for_server(timeout_sec=1.0):
+        while not self.drive_omni_client.wait_for_server(timeout_sec=hrc_utils.SERVICE_TIMEOUT):
             self.info("'OmniDrive' action server not available, waiting...")
 
         goal_msg = hrc_action.OmniDrive.Goal()
