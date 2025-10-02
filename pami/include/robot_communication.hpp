@@ -2,17 +2,15 @@
 #define ROBOT_COMMUNICATION_HPP
 
 #include "BLEDevice.h"
-
-/**
- * @brief Duration of the scan in seconds
- */
-#define SCAN_DURATION 30
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
 /**
  * @class RobotCommunication
  * @brief Create a BLE client to communicate with the robot
  */
-class RobotCommunication : public BLEAdvertisedDeviceCallbacks
+class RobotCommunication
 {
 public:
     /**
@@ -21,90 +19,99 @@ public:
     RobotCommunication();
 
     /**
-     * @brief A destructor
-     */
-    ~RobotCommunication();
-
-    /**
      * @brief Setup the BLE client and connect to server
      */
     void setup();
 
     /**
-     * @brief Update the start_char_ variable when the notification is triggered
-     * @param p_BLE_remote_characteristic a model of the server characteristic
-     * @param p_data the value of the characteristic
-     * @param length the length of the value of the caracteristic
-     * @param is_notify whether the server has published a notification
+     * @brief Return amount connected clients
+     * @return amount connected clients
      */
-    void startNotifyCallback(
-        BLERemoteCharacteristic* p_BLE_remote_characteristic, uint8_t* p_data, size_t length,
-        bool is_notify);
+    int amountConnectedClient();
 
     /**
-     * @brief Connect to the server on the robot
-     * @param p_address the adress of the advertised server
-     * @return if connected to the requested server, service and characteristic
+     * @brief Return current instruction from client
+     * @return current instruction from client
      */
-    bool connectToServer(BLEAddress& p_address);
+    std::string currentInstruction();
 
     /**
-     * @brief Check if the published value has changed
-     * @return if the published value has changed
-     */
-    bool newValueReceived() const;
-
-    /**
-     * @brief Read the string published by the server
-     * @return the string published by the server
-     */
-    std::string readServer();
-
-    /**
-     * @brief Called for each advertising BLE server check if its the searched server
-     * @param advertised_device a representation of the server device
-     */
-    void onResult(BLEAdvertisedDevice advertised_device) override;
-
-    /**
-     * @brief The UUID of the service and characteristic we wish to connect to
+     * @brief The UUID of the service and characteristic we wish to create
      */
     BLEUUID service_UUID_;
     BLEUUID message_characteristic_UUID_;
 
     /**
-     * @brief The adress of the server
+     * @brief Model of the server
      */
-    BLEAddress * p_server_address_;
+    BLEServer* pServer_;
 
     /**
-     * @brief Variable representing whether we have found the requested server and wether we are connected
+     * @brief Model of the characteristic
      */
-    bool do_connect_;
-    bool connected_;
+    BLECharacteristic* pCharacteristic_ = NULL;
 
     /**
-     * @brief Model of the start characteristic
+     * @brief Variable representing wether a client is connected
      */
-    BLERemoteCharacteristic* message_characteristic_;
+    bool connectedClient_;
 
     /**
-     * @brief Variable to store the values published by the server
+     * @brief Most recent instruction sent by client
      */
-    std::string message_characteristic_reponse_;
-
-    /**
-     * @brief Variable representing whether a new value has been published by the server
-     */
-    bool new_value_;
-
-    /**
-     * @brief Variables used to activate and desactivate notifications
-     */
-    const uint8_t notification_on_[2] = {0x1, 0x0};
-    const uint8_t notification_off_[2] = {0x0, 0x0};
+    std::string currentInstructions_;
 
 protected:
 
+};
+
+class PamiServerCallbacks : public BLEServerCallbacks
+{
+public:
+    /**
+     * @brief A constructor
+     * @param connectedClients_ a pointer towards the boolean that tracks wether a client is connected
+     */
+    PamiServerCallbacks(bool* connectedClients_);
+
+    /**
+     * @brief Called when a client connect to the server
+     * @param pServer_ a model of the server
+     */
+    void onConnect(BLEServer* pServer_);
+
+    /**
+     * @brief Called when a client disconnect to the server
+     * @param pServer_ a model of the server
+     */
+    void onDisconnect(BLEServer* pServer_);
+
+    /**
+     * @brief A pointer towards the boolean that tracks wether a client is connected
+     */
+    bool* connectedClients_;
+
+
+};
+
+class PamiServerCharacteristicCallbacks : public BLECharacteristicCallbacks
+{
+public:
+    /**
+     * @brief A constructor
+     * @param currentInstructions_ a pointer towards the std::string that saves the most recent instruction
+     */
+    PamiServerCharacteristicCallbacks(std::string* currentInstructions_);
+
+    /**
+     * @brief Called when a client write on the characteristic
+     * @param pCharacteristic_ a model of the caracteristic
+     */
+    void onWrite(BLECharacteristic* pCharacteristic_);
+
+    /**
+     * @brief A pointer towards the std::string that saves the most recent instruction
+     */
+    std::string* currentInstructions_;
 };
 #endif // ROBOT_COMMUNICATION_HPP
